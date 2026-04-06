@@ -11,7 +11,7 @@ lab:
 
 # Create a knowledge mining solution
 
-In this exercise, you use Azure AI Search to create a knowledge mining solution that indexes a set of travel brochure documents. The indexing process uses AI skills to extract key information from the documents, and you'll create a Python client application to search the index.
+In this exercise, you use Azure AI Search to create a knowledge mining solution that indexes a set of travel brochure documents. The indexing process uses AI skills to extract key information from the documents, and you'll build a knowledge store containing enriched data for further analysis. Finally, you'll create a Python client application to search the index.
 
 This exercise takes approximately **40** minutes.
 
@@ -63,45 +63,83 @@ Your knowledge mining solution will extract information from travel brochure doc
 Now that you have the documents in place, you can create an indexer to use AI skills to extract information from them.
 
 1. In the Azure portal, browse to your Azure AI Search resource. On its **Overview** page, select **Import data**.
-1. On the **Connect to your data** page, in the **Data Source** list, select **Azure Blob Storage**. 
-1. Select **keyword search**. Then complete the data store details with the following values:
+1. On the **Connect to your data** page, in the **Data Source** list, select **Azure Blob Storage**. Then complete the data store details with the following values:
+    - **Data Source**: Azure Blob Storage
+    - **Data source name**: `margies-documents`
+    - **Data to extract**: Content and metadata
+    - **Parsing mode**: Default
+    - **Subscription**: *Your Azure subscription*
+    - **Connection string**:
+        - Select **Choose an existing connection**
+        - Select your storage account
+        - Select the **documents** container
+    - **Managed identity authentication**: None
+    - **Container name**: documents
+    - **Blob folder**: *Leave this blank*
+    - **Description**: `Travel brochures`
+1. Proceed to the next step (**Add cognitive skills**), which has three expandable sections.
+1. In the **Attach Azure AI Services** section, select **Free (limited enrichments)**\*.
 
-1. On **Connect to your data** form set the following:
-    - **Storage account**: *Your recently created storage account*
-    - **Blob container**: Select the **documents** container.
-    - Leave the remaining options as their default values, and then select **Next**.
+    > **Note**: \*The free Azure AI Services enrichment for Azure AI Search can be used to index a maximum of 20 documents. In a production solution, you should create and attach an Azure AI Services resource.
 
-1. On **Apply AI enrichments** set the following:
-    - Select **Extract phrases**.
-    - Select **Extract entities**, select the settings icon, ensure only **Persons** and **Locations** are selected, and then select **Save**.
-    - Select **Extract text from images**, select the settings icon, ensure **Generate tags** and **Categorize content** are selected, and then select **Save**.
-    - If it isn't already selected, choose the free Foundry Tools resource option, and then select **Next**.
-    
-    > **Note**: The free Azure AI Services enrichment for Azure AI Search can be used to index a maximum of 20 documents. In a production solution, you should create and attach an Azure AI Services resource.
+1. In the **Add enrichments** section:
+    - Change the **Skillset name** to `margies-skillset`.
+    - Select the option **Enable OCR and merge all text into merged_content field**.
+    - Ensure that the **Source data field** is set to **merged_content**.
+    - Leave the **Enrichment granularity level** as **Source field**.
+    - Select the following enriched fields:
 
-1. On **Preview mappings** set the following configuration:
-    - The fields are already mapped based on the options you selected in the previous step.
-    - Review the following fields and ensure that they're configured as shown in the following table. To update a field, select it and then select **Configure field**. Leave all other fields with their default settings.
+        | Cognitive Skill | Parameter | Field name |
+        | --------------- | ---------- | ---------- |
+        | **Text Cognitive Skills** | |  |
+        | Extract people names | | people |
+        | Extract location names | | locations |
+        | Extract key phrases | | keyphrases |
+        | **Image Cognitive Skills** | |  |
+        | Generate tags from images | | imageTags |
+        | Generate captions from images | | imageCaption |
 
-    | Target index field name | Retrievable | Filterable | Sortable | Facetable | Searchable |
+        Double-check your selections (it can be difficult to change them later).
+
+1. In the **Save enrichments to a knowledge store** section:
+    - Select only the following checkboxes (an <font color="red">error</font> will appear — you'll resolve that shortly):
+        - **Azure file projections**:
+            - Image projections
+        - **Azure table projections**:
+            - Documents
+                - Key phrases
+        - **Azure blob projections**:
+            - Document
+    - Under **Storage account connection string** (beneath the <font color="red">error messages</font>):
+        - Select **Choose an existing connection**
+        - Select your storage account
+        - Select the **documents** container (*this is only required to set the storage account — you'll change the container name below!*)
+    - Change the **Container name** to `knowledge-store`.
+1. Proceed to the next step (**Customize target index**).
+1. Change the **Index name** to `margies-index`.
+1. Ensure that the **Key** is set to **metadata_storage_path**, leave the **Suggester name** blank, and ensure **Search mode** is **analyzingInfixMatching**.
+1. Make the following changes to the index fields, leaving all other fields with their default settings (**IMPORTANT**: you may need to scroll to the right to see the entire table):
+
+    | Field name | Retrievable | Filterable | Sortable | Facetable | Searchable |
     | ---------- | ----------- | ---------- | -------- | --------- | ---------- |
     | metadata_storage_size | &#10004; | &#10004; | &#10004; | | |
     | metadata_storage_last_modified | &#10004; | &#10004; | &#10004; | | |
-    | title | &#10004; | &#10004; | &#10004; | | &#10004; |
+    | metadata_storage_name | &#10004; | &#10004; | &#10004; | | &#10004; |
     | locations | &#10004; | &#10004; | | | &#10004; |
-    | persons | &#10004; | &#10004; | | | &#10004; |
-    | keyPhrases | &#10004; | &#10004; | | | &#10004; |
+    | people | &#10004; | &#10004; | | | &#10004; |
+    | keyphrases | &#10004; | &#10004; | | | &#10004; |
 
-    - Double-check your selections carefully.
-    - Select **Next**.
-1. On **Advanced settings** set the following:
-    - Ensure **Enable semantic ranker** is selected.
-    - If it isn't already selected, set **Schedule** to **Once**.
-    - Select **Next**.
+    Double-check your selections carefully.
 
-1. On **Review and create** set **Objects name prefix** to `margies-index` and then select **Create**.
-1. You may close the success notification.
-1. In the navigation pane on the left, under **Search management**, view the **Indexers** page. The **margies-index-indexer** should appear. Wait a few minutes, and click **&orarr; Refresh** until the **Status** indicates **Success**.
+1. Proceed to the next step (**Create an indexer**).
+1. Change the **Indexer name** to `margies-indexer`.
+1. Leave the **Schedule** set to **Once**.
+1. Select **Submit** to create the data source, skillset, index, and indexer. The indexer runs automatically and:
+    - Extracts the document metadata fields and content from the data source
+    - Runs the skillset of cognitive skills to generate additional enriched fields
+    - Maps the extracted fields to the index
+    - Saves the extracted data assets to the knowledge store
+1. In the navigation pane on the left, under **Search management**, view the **Indexers** page. The **margies-indexer** should appear. Wait a few minutes, and click **&orarr; Refresh** until the **Status** indicates **Success**.
 
 ## Search the index
 
@@ -127,7 +165,7 @@ Now that you have an index, you can search it.
     {
       "search": "*",
       "count": true,
-      "select": "title,locations"
+      "select": "metadata_storage_name,locations"
     }
     ```
 
@@ -139,7 +177,7 @@ Now that you have an index, you can search it.
     {
       "search": "New York",
       "count": true,
-      "select": "title,keyPhrases"
+      "select": "metadata_storage_name,keyphrases"
     }
     ```
 
@@ -151,7 +189,7 @@ Now that you have an index, you can search it.
     {
         "search": "New York",
         "count": true,
-        "select": "title,keyPhrases",
+        "select": "metadata_storage_name,keyphrases",
         "filter": "metadata_storage_size lt 380000"
     }
     ```
@@ -208,12 +246,7 @@ Now that you have a useful index, you can query it from a Python client applicat
     - Retrieves the configuration settings from the .env file.
     - Creates a `SearchClient` with the endpoint, key, and index name.
     - Prompts the user for a search query in a loop (until they type "quit").
-    - Searches the index using the query, returning the following fields ordered by title:
-        - title
-        - locations
-        - persons
-        - keyPhrases
-    - Parses the search results that are returned to display the fields returned for each document in the result set.
+    - Searches the index and displays the file name, locations, people, and key phrases for each result.
 1. In the VS Code terminal, run the application:
 
     ```
@@ -224,11 +257,36 @@ Now that you have a useful index, you can query it from a Python client applicat
 1. Try another query, such as `flights`.
 1. When you're finished testing, enter `quit` to close the app.
 
-## Note about knowledge store
+## View the knowledge store
 
-Knowledge store steps are excluded from this version of the exercise.
+After running the indexer, the enriched data extracted by the indexing process is stored in the knowledge store projections.
 
-The current **Import data** keyword search flow in the Azure portal doesn't create a knowledge store for this scenario, and the multimodal alternative hasn't been adopted for this exercise.
+### View object projections
+
+The *object* projections consist of a JSON file for each indexed document, stored in a blob container.
+
+1. In the Azure portal, view the storage account you created previously.
+1. Select **Storage browser** in the navigation pane.
+1. Expand **Blob containers** to view the containers. In addition to the **documents** container, there should be two new containers: **knowledge-store** and **margies-skillset-image-projection**.
+1. Select the **knowledge-store** container. It should contain a folder for each indexed document.
+1. Open any folder, then select the **objectprojection.json** file and download it. Each JSON file contains a representation of an indexed document with the enriched data extracted by the skillset.
+
+### View file projections
+
+The *file* projections create JPEG files for each image extracted from the documents during indexing.
+
+1. In the storage browser, select the **margies-skillset-image-projection** blob container. It contains a folder for each document that contained images.
+1. Open any folder and view its \*.jpg files. Download and open an image file to see the extracted image.
+
+### View table projections
+
+The *table* projections form a relational schema of enriched data.
+
+1. In the storage browser, expand **Tables**.
+1. Select the **margiesSkillsetDocument** table to view a row for each indexed document.
+1. View the **margiesSkillsetKeyPhrases** table, which contains a row for each key phrase extracted from the documents.
+
+The table projections enable you to build analytical and reporting solutions that query a relational schema. Key columns can be used to join tables — for example, to retrieve all key phrases from a specific document.
 
 ## Clean up
 
